@@ -1,15 +1,15 @@
 # https://gist.github.com/gnarf/b103e77f37236ca72d8e
 :vms:
-  node1:
-    :hostname: "node1"
+  nettest1:
+    :hostname: "nettest1"
     :ip: "192.168.0.201"
     :ram: 1024
     :cpu: 1
     :box: "ubuntu/xenial64"
     :id: 11
 
-  node2:
-    :hostname: "node2"
+  nettest2:
+    :hostname: "nettest2"
     :ip: "192.168.0.202"
     :ram: 1024
     :cpu: 1
@@ -17,17 +17,15 @@
     :id: 12
 
 :groups:
-  master:
-    - master
   slaves:
-    - node1
-    - node2
+    - nettest1
+    - nettest2
   agents:
-    - node1
-    - node2
+    - nettest1
+    - nettest2
   servers:
-    - node1
-    - node2
+    - nettest1
+    - nettest2
 
 
 # groups = {

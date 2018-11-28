@@ -9,6 +9,8 @@ config_yml = YAML.load_file(File.open(__dir__ + '/vagrant-config.yml'))
 NON_ROOT_USER = 'vagrant'.freeze
 SWAPSIZE = 1000
 
+# DOMAIN = ".hyenalab.home"
+
 # SOURCE: https://github.com/plone/ansible-playbook/blob/master/Vagrantfile#L8
 # We use this provisioner to write the vbox_host.cfg ansible inventory file,
 # which makes it easier to use ansible-playbook directly.
@@ -62,7 +64,7 @@ Vagrant.configure(2) do |config|
 
   config_yml[:vms].each do |name, settings|
     # use the config key as the vm identifier
-    config.vm.define name.to_s, autostart: true, primary: true do |vm_config|
+    config.vm.define name, autostart: true, primary: true do |vm_config|
       config.ssh.insert_key = false
       vm_config.vm.usable_port_range = (2200..2250)
 
@@ -82,10 +84,12 @@ Vagrant.configure(2) do |config|
       # vm_config.vm.synced_folder '.', '/home/vagrant/sync', disabled: true
 
       # SOURCE: https://github.com/darkedges/vagrant-ansible-kubernetes/blob/master/Vagrantfile#L38
-      vm_config.vm.synced_folder '.', '/shared', type: 'nfs'
+      vm_config.vm.synced_folder '.', '/shared', type: 'nfs', nfs_udp: true
 
-      vm_config.vm.provision 'shell', inline: 'apt-get install -y python'
-      vm_config.vm.provision 'write_vbox_cfg', machine: os_release_name
+      # vm_config.vm.provision 'shell', inline: 'apt-get install -y python'
+      vm_config.vm.provision 'shell', inline: 'ip address', run: 'always' # make user feel good
+
+      vm_config.vm.provision 'write_vbox_cfg', machine: "#{os_release_name}"
 
       # assign an ip address in the hosts network
       vm_config.vm.network 'private_network', ip: settings[:ip]
@@ -103,7 +107,6 @@ Vagrant.configure(2) do |config|
         # Prevent clock drift, see http://stackoverflow.com/a/19492466/323407
         v.customize ['guestproperty', 'set', :id, '/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold', 10_000]
 
-        v.customize ['modifyvm', :id, '--macaddress1', '5CA1AB1E00' + settings[:id].to_s]
 
         # SOURCE: https://www.virtualbox.org/manual/ch09.html#changenat
         # NOTE:  # do not use 10.x network for NAT ?
@@ -133,19 +136,15 @@ Vagrant.configure(2) do |config|
         vm_config.hostmanager.include_offline = true
       end
 
-      if Vagrant.has_plugin?('vagrant-cachier')
-        config.cache.scope = :machine
-        config.cache.synced_folder_opts = {
-          type: :nfs,
-          mount_options: ['rw', 'vers=3', 'udp', 'nolock', 'noatime']
-        }
-      end
+        if Vagrant.has_plugin?('vagrant-cachier')
+          config.cache.scope = :machine
+          config.cache.synced_folder_opts = {
+            type: :nfs,
+            mount_options: ['rw', 'vers=3', 'udp', 'nolock', 'noatime']
+          }
+        end
 
-      # SOURCE: https://github.com/darkedges/vagrant-ansible-kubernetes/blob/master/Vagrantfile#L24
-      config.vm.provision 'shell', inline: "HOSTNAME=`hostname`; sudo sed -ri \"/127\.0\.0\.1.*$HOSTNAME.*/d\" /etc/hosts"
 
-      vm_config.vm.provision 'shell', inline: 'ip address', run: 'always' # make user feel good
-      vm_config.vm.provision 'file', source: 'hosts', destination: 'hosts'
       # Enable provisioning with a shell script. Additional provisioners such as
       # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
       # documentation for more information about their specific syntax and use.
@@ -158,11 +157,10 @@ Vagrant.configure(2) do |config|
               exit 0
             fi
 
+            HOSTNAME=`hostname`; sudo sed -ri \"/127\.0\.0\.1.*$HOSTNAME.*/d\" /etc/hosts
+
             sudo apt-get -y update
             sudo apt-get -y install python-minimal python-apt
-            else
-              echo 'swapfile found. No changes made.'
-            fi
 
             DEBIAN_FRONTEND=noninteractive apt-get update; apt-get install -y \
             sudo \
@@ -182,19 +180,27 @@ Vagrant.configure(2) do |config|
         s.privileged = true
       end
 
-      vm_config.vm.provision :ansible do |ansible|
-        ansible.host_key_checking = 'false'
-        # Disable default limit to connect to all the machines
-        ansible.limit = 'all'
-        ansible.playbook = 'provisioning/playbook.yml'
-        ansible.groups = config_yml[:groups]
-        ansible.verbose = 'vvv'
-        ansible.extra_vars = {
-          deploy_env: 'vagrant'
-        }
-        # ansible.skip_tags = %w[bootstrap]
-        ansible.raw_arguments = ['--forks=10']
-      end
+
+
+      # SOURCE: https://github.com/darkedges/vagrant-ansible-kubernetes/blob/master/Vagrantfile#L24
+      # config.vm.provision 'shell', inline: "HOSTNAME=`hostname`; sudo sed -ri \"/127\.0\.0\.1.*$HOSTNAME.*/d\" /etc/hosts"
+
+      vm_config.vm.provision 'shell', inline: 'ip address', run: 'always' # make user feel good
+      vm_config.vm.provision 'file', source: 'hosts', destination: 'hosts'
+
+      # vm_config.vm.provision :ansible do |ansible|
+      #   ansible.host_key_checking = 'false'
+      #   # Disable default limit to connect to all the machines
+      #   ansible.limit = 'all'
+      #   ansible.playbook = 'provisioning/playbook.yml'
+      #   ansible.groups = config_yml[:groups]
+      #   ansible.verbose = 'vvv'
+      #   ansible.extra_vars = {
+      #     deploy_env: 'vagrant'
+      #   }
+      #   # ansible.skip_tags = %w[bootstrap]
+      #   ansible.raw_arguments = ['--forks=10']
+      # end  # end - vm_config.vm.provision :ansible do |ansible|
     end
   end
 end
