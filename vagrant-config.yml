@@ -1,0 +1,53 @@
+# https://gist.github.com/gnarf/b103e77f37236ca72d8e
+:vms:
+  node1:
+    :hostname: "node1"
+    :ip: "192.168.0.201"
+    :ram: 1024
+    :cpu: 1
+    :box: "ubuntu/xenial64"
+    :id: 11
+
+  node2:
+    :hostname: "node2"
+    :ip: "192.168.0.202"
+    :ram: 1024
+    :cpu: 1
+    :box: "ubuntu/xenial64"
+    :id: 12
+
+:groups:
+  master:
+    - master
+  slaves:
+    - node1
+    - node2
+  agents:
+    - node1
+    - node2
+  servers:
+    - node1
+    - node2
+
+
+# groups = {
+#   "etcd" => ["etcd-ca", "etcd-1", "etcd-2"],
+#   "kubeadmn" => ["etcd-ca", "etcd-1", "etcd-2"],
+#   "all_groups:children" => ["etcd", "kubeadmn"]
+# }
+
+# host_vars = {
+#     "etcd-ca" => {
+#         "etcdca" => true,
+#         "ansible_host" => "192.168.0.200",
+#         "ansible_port" => 22
+#     },
+#     "etcd-1" => {
+#         "ansible_host" => "192.168.0.199",
+#         "ansible_port" => 22
+#     },
+#     "etcd-2" => {
+#         "ansible_host" => "192.168.0.198",
+#         "ansible_port" => 22
+#     }
+# }

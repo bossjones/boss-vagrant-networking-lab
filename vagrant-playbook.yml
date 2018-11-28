@@ -1,0 +1,109 @@
+---
+# # no_log: true
+# - name: Vagrant Test Playbook
+#   hosts: servers
+#   gather_facts: True
+#   become: yes
+#   become_method: sudo
+#   environment:
+#     SHELL: /bin/bash
+#   tags:
+#     - docker
+#   roles:
+#     - role: boss-ansible-role-bootstrap
+#     - role: boss-ansible-role-core
+#     - role: boss-ansible-role-fact
+#     - role: boss-ansible-role-environment
+#     - role: boss-ansible-role-etckeeper
+#     - role: ../
+#       bossjones__user: root
+#       bossjones__group: root
+#       boss__kubernetes__kubeadm__install_method: shell
+
+- name: Vagrant Test Playbook
+  hosts: servers
+  gather_facts: True
+  become: yes
+  become_method: sudo
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+    SHELL: /bin/bash
+  vars:
+    hosts_file: /etc/hosts.molecule
+    boss__kubernetes__kubeadm__version: "18.03"
+    boss__kubernetes__kubeadm__users: ["test"]
+    boss__kubernetes__kubeadm__daemon_options:
+      - "--dns 8.8.8.8 -H 0.0.0.0:2375 -H unix:///var/run/docker.sock $DOCKER_DAEMON_ARGS"
+
+  pre_tasks:
+    - name: Update apt cache.
+      apt: update_cache=yes cache_valid_time=600
+      when: ansible_os_family == 'Debian'
+
+    - name: Add test user
+      user:
+        name: "test"
+        shell: "/bin/bash"
+
+  roles:
+    - role: boss-ansible-role-bootstrap
+      # Disable raw commands to avoid sudo issues.
+      boss__bootstrap_raw: False
+      # Don't set domain on Travis.
+      boss__bootstrap_domain: ''
+      # Try bootstrapping a different IP address to avoid idempotency loop.
+      boss__bootstrap_ipv4: '127.0.1.2'
+      boss__hosts_file: /etc/hosts.molecule
+      boss__bootstrap_admin_default_users:
+        - name: bossjones
+      boss__bootstrap_admin_groups: [ 'admins', 'staff', 'adm', 'sudo', 'bossjones' ]
+      boss__bootstrap_admin_system: False
+    - role: boss-ansible-role-core
+    - role: boss-ansible-role-fact
+    - role: boss-ansible-role-environment
+    - role: boss-ansible-role-etckeeper
+    - role: geerlingguy.pip
+    - role: ../
+      boss__kubernetes__kubeadm__install_method: "shell"
+
+
+
+
+  post_tasks:
+    - name: Ensure Docker gets installed
+      command: docker --version
+      register: result_pinned
+      changed_when: result_pinned.rc != 0
+
+    - name: Run the equivalent of "apt-get update"
+      apt:
+        update_cache: True
+      changed_when: False
+
+    - name: Ensure pinned Docker version wasn't updated
+      # This is valid because 18.06+ is currently out. If the pin failed then
+      # this docker --version would be different from the previous check.
+      command: docker --version
+      register: result
+      changed_when: result.stdout != result_pinned.stdout
+
+    - name: Ensure test user can access Docker without root access
+      command: groups test
+      register: result
+      changed_when: result.stdout.split(":")[1] | trim != "test docker"
+
+    - name: Ensure Docker Compose gets installed
+      command: docker-compose --version
+      register: result
+      changed_when: result.rc != 0
+
+    - name: Ensure /etc/systemd/system/docker.service contains '--dns 8.8.8.8'
+      # Double dashes: https://unix.stackexchange.com/a/11382
+      command: grep -- "--dns 8.8.8.8" /etc/systemd/system/docker.service
+      register: result
+      changed_when: result.rc != 0
+
+    - name: Ensure Docker clean up cron job was added
+      command: crontab -l
+      register: result
+      changed_when: not result.stdout is search("docker system prune -f")

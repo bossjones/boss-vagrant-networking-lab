@@ -1,0 +1,48 @@
+---
+- hosts: all
+
+  vars:
+    timezone: 'America/New_York'
+
+  tasks:
+    - name: "Check current timezone"
+      shell: cat /etc/timezone
+      register: current_timezone
+      changed_when: False
+
+    - name: "Set America/New_York timezone"
+      file: src=/usr/share/zoneinfo/{{ timezone }}
+            dest=/etc/localtime
+            state=link
+            force=yes
+      when: current_timezone.stdout != '{{ timezone }}'
+      become: yes
+
+    - name: "Install Dependendies"
+      apt: pkg={{item}}
+           update_cache=yes
+           cache_valid_time=3600
+      with_items:
+        - libxml2
+        - ca-certificates
+        - dnsmasq
+        - traceroute
+      become: yes
+
+    # - name: "Configure dnsmasq.conf"
+    #   copy: src=etc/dnsmasq.conf dest=/etc/dnsmasq.conf
+    #   become: yes
+    # - name: "Configure dnsmasq.d"
+    #   copy: src=etc/dnsmasq.d/ dest=/etc/dnsmasq.d/
+    #   become: yes
+    # - name: "Restart dnsmasq"
+    #   service: name=dnsmasq state=restarted
+    #   become: yes
+    - name: "Add resolv.conf"
+      copy: src="etc/resolv.conf" dest="/etc/resolv.conf.tmpl"
+      become: yes
+
+    - name: "Enable IP Forwarding"
+      sysctl: name="net.ipv4.ip_forward" value=1 sysctl_set=yes state=present reload=yes
+      become: yes
+
