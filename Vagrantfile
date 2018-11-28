@@ -141,7 +141,9 @@ Vagrant.configure(2) do |config|
         # NOTE: If, for any reason, the NAT network needs to be changed, this can be achieved with the following command: VBoxManage modifyvm "VM name" --natnet1 "192.168/16"
         # SOURCE: https://github.com/hashicorp/vagrant/issues/2915#issuecomment-147026214
         # ORIG # v.customize ['modifyvm', :id, '--natnet1', "192.168/16"]
-        v.customize ['modifyvm', :id, '--natnet1', '168.222.0/24']
+        # v.customize ['modifyvm', :id, '--natnet1', '168.222.0/24']
+
+        v.customize ["modifyvm", :id, "--audio", "none"]
       end
 
       # If you want to create an array where each entry is a single word, you can use the %w{} syntax, which creates a word array:
@@ -199,7 +201,6 @@ Vagrant.configure(2) do |config|
           ; \
             DEBIAN_FRONTEND=noninteractive apt-get install -y python-six python-pip \
           ; \
-                rm -rf /var/lib/apt/lists/*
           touch /vagrant_bootstrap && \
           chown #{NON_ROOT_USER}:#{NON_ROOT_USER} /vagrant_bootstrap
         SHELL
@@ -208,7 +209,6 @@ Vagrant.configure(2) do |config|
 
       # SOURCE: https://github.com/darkedges/vagrant-ansible-kubernetes/blob/master/Vagrantfile#L24
       # config.vm.provision 'shell', inline: "HOSTNAME=`hostname`; sudo sed -ri \"/127\.0\.0\.1.*$HOSTNAME.*/d\" /etc/hosts"
-
 
       # vm_config.vm.provision 'write_vbox_cfg', machine: os_release_name.to_s
       vm_config.vm.provision 'write_vbox_cfg', machine: (settings[:hostname]).to_s
