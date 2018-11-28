@@ -1,0 +1,2 @@
+reload:
+	@vagrant reload --provision

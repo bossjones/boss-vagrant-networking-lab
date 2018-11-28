@@ -3,7 +3,27 @@
 
 # Vagrant multi machine configuration
 
-require 'yaml'
+# SOURCE: https://github.com/elifesciences/builder/blob/master/Vagrantfile
+%w[yaml fileutils pp].each { |mod| require mod }
+
+def prn(out = '', nl = true)
+  STDERR.print out
+  STDERR.print "\n" if nl
+  STDERR.flush
+  nil
+end
+
+def runcmd(cmd)
+  prn 'running command: ' + cmd
+  output = nil
+  IO.popen(cmd) do |io|
+    output = io.read
+  end
+  exit_status = $CHILD_STATUS.exitstatus
+  throw "Command '#{cmd}' exited with #{exit_status}" if exit_status != 0
+  output
+end
+
 config_yml = YAML.load_file(File.open(__dir__ + '/vagrant-config.yml'))
 
 NON_ROOT_USER = 'vagrant'.freeze
@@ -40,7 +60,17 @@ module AnsibleInventory
       stdout.close
       stderr.gets(nil)
       stderr.close
+
       exit_code = wait_thr.value.exitstatus
+
+      puts "stdin = #{stdin}"
+      puts "stdout = #{stdout}"
+      puts "stderr = #{stderr}"
+      puts "wait_thr = #{wait_thr}"
+      puts "output = #{output}"
+
+      puts "Command 'vagrant ssh-config #{config.machine}'"
+
       if exit_code == 0
         # parse out the key variables
         /HostName (?<host>.+)/ =~ output
@@ -49,7 +79,7 @@ module AnsibleInventory
         /IdentityFile (?<keyfile>.+)/ =~ output
         # write an ansible inventory file
         contents = "#{config.machine} ansible_ssh_port=#{port} ansible_ssh_host=#{host} ansible_ssh_user=#{user} ansible_ssh_private_key_file=#{keyfile} ansible_ssh_extra_args='-o StrictHostKeyChecking=no'\n"
-        File.open('vbox_host.cfg', 'w') do |aFile|
+        File.open('./vbox_host.cfg', 'w+') do |aFile|
           aFile.puts(contents)
         end
       end
@@ -73,7 +103,7 @@ Vagrant.configure(2) do |config|
       # Ubuntu
       vm_config.vm.box = settings[:box]
 
-      os_release_name = settings[:box].split('/')[1].gsub(/[64]/, '')
+      # os_release_name = settings[:box].split('/')[1].gsub(/[64]/, '')
 
       # DISABLED 11/28/2018
       # Vagrant can share the source directory using rsync, NFS, or SSHFS (with the vagrant-sshfs
@@ -88,8 +118,6 @@ Vagrant.configure(2) do |config|
 
       # vm_config.vm.provision 'shell', inline: 'apt-get install -y python'
       vm_config.vm.provision 'shell', inline: 'ip address', run: 'always' # make user feel good
-
-      vm_config.vm.provision 'write_vbox_cfg', machine: "#{os_release_name}"
 
       # assign an ip address in the hosts network
       vm_config.vm.network 'private_network', ip: settings[:ip]
@@ -106,7 +134,6 @@ Vagrant.configure(2) do |config|
         v.customize ['modifyvm', :id, '--natdnsproxy1', 'on']
         # Prevent clock drift, see http://stackoverflow.com/a/19492466/323407
         v.customize ['guestproperty', 'set', :id, '/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold', 10_000]
-
 
         # SOURCE: https://www.virtualbox.org/manual/ch09.html#changenat
         # NOTE:  # do not use 10.x network for NAT ?
@@ -136,14 +163,13 @@ Vagrant.configure(2) do |config|
         vm_config.hostmanager.include_offline = true
       end
 
-        if Vagrant.has_plugin?('vagrant-cachier')
-          config.cache.scope = :machine
-          config.cache.synced_folder_opts = {
-            type: :nfs,
-            mount_options: ['rw', 'vers=3', 'udp', 'nolock', 'noatime']
-          }
-        end
-
+      if Vagrant.has_plugin?('vagrant-cachier')
+        config.cache.scope = :machine
+        config.cache.synced_folder_opts = {
+          type: :nfs,
+          mount_options: ['rw', 'vers=3', 'udp', 'nolock', 'noatime']
+        }
+      end
 
       # Enable provisioning with a shell script. Additional provisioners such as
       # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
@@ -180,27 +206,31 @@ Vagrant.configure(2) do |config|
         s.privileged = true
       end
 
-
-
       # SOURCE: https://github.com/darkedges/vagrant-ansible-kubernetes/blob/master/Vagrantfile#L24
       # config.vm.provision 'shell', inline: "HOSTNAME=`hostname`; sudo sed -ri \"/127\.0\.0\.1.*$HOSTNAME.*/d\" /etc/hosts"
 
-      vm_config.vm.provision 'shell', inline: 'ip address', run: 'always' # make user feel good
+
+      # vm_config.vm.provision 'write_vbox_cfg', machine: os_release_name.to_s
+      vm_config.vm.provision 'write_vbox_cfg', machine: (settings[:hostname]).to_s
+      # runcmd("vagrant ssh-config #{settings[:hostname]}")
+
+      # make user feel good
+      vm_config.vm.provision 'shell', inline: 'ip address', run: 'always'
       vm_config.vm.provision 'file', source: 'hosts', destination: 'hosts'
 
-      # vm_config.vm.provision :ansible do |ansible|
-      #   ansible.host_key_checking = 'false'
-      #   # Disable default limit to connect to all the machines
-      #   ansible.limit = 'all'
-      #   ansible.playbook = 'provisioning/playbook.yml'
-      #   ansible.groups = config_yml[:groups]
-      #   ansible.verbose = 'vvv'
-      #   ansible.extra_vars = {
-      #     deploy_env: 'vagrant'
-      #   }
-      #   # ansible.skip_tags = %w[bootstrap]
-      #   ansible.raw_arguments = ['--forks=10']
-      # end  # end - vm_config.vm.provision :ansible do |ansible|
+      vm_config.vm.provision :ansible do |ansible|
+        ansible.host_key_checking = 'false'
+        # Disable default limit to connect to all the machines
+        ansible.limit = 'all'
+        ansible.playbook = 'provisioning/playbook.yml'
+        ansible.groups = config_yml[:groups]
+        ansible.verbose = 'vvv'
+        ansible.extra_vars = {
+          deploy_env: 'vagrant'
+        }
+        # ansible.skip_tags = %w[bootstrap]
+        ansible.raw_arguments = ['--forks=10']
+      end # end - vm_config.vm.provision :ansible do |ansible|
     end
   end
 end
